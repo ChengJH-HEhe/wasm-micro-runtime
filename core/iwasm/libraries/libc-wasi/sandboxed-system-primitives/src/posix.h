@@ -45,7 +45,7 @@ struct argv_environ_values {
 };
 
 bool fd_table_init(struct fd_table *);
-bool fd_table_insert_existing(struct fd_table *, __wasi_fd_t, int);
+int fd_table_insert_existing(struct fd_table *, __wasi_fd_t, int);
 bool fd_prestats_init(struct fd_prestats *);
 bool fd_prestats_insert(struct fd_prestats *, const char *, __wasi_fd_t);
 bool argv_environ_init(struct argv_environ_values *argv_environ,

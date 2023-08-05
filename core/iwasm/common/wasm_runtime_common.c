@@ -1609,6 +1609,9 @@ wasm_runtime_validate_app_addr(WASMModuleInstanceCommon *module_inst,
     return false;
 }
 
+extern int printf(const char* fmt, ...);
+
+
 bool
 wasm_runtime_validate_app_str_addr(WASMModuleInstanceCommon *module_inst,
                                    uint32 app_str_offset)
@@ -1622,10 +1625,15 @@ wasm_runtime_validate_app_str_addr(WASMModuleInstanceCommon *module_inst,
 
     str = wasm_runtime_addr_app_to_native(module_inst, app_str_offset);
     str_end = str + (app_end_offset - app_str_offset);
-    while (str < str_end && *str != '\0')
+    //printf("validate_app_str_addr: str = 0x%016lX, str_end = 0x%016lX\nstr content: ", (uint64)str, (uint64)str_end);
+    while (str < str_end && *str != '\0') {
+    	//printf("%c", *str);
         str++;
-    if (str == str_end)
+    }
+    //printf("\n");
+    if (str == str_end) {
         goto fail;
+    }
     return true;
 
 fail:
@@ -1869,6 +1877,7 @@ wasm_runtime_init_wasi(WASMModuleInstanceCommon *module_inst,
                        char *error_buf, uint32 error_buf_size)
 {
     WASIContext *wasi_ctx;
+    int temp_val = -1;
     char *argv_buf = NULL;
     char **argv_list = NULL;
     char *env_buf = NULL;
@@ -1961,7 +1970,7 @@ wasm_runtime_init_wasi(WASMModuleInstanceCommon *module_inst,
     if (!fd_table_init(curfds)) {
         set_error_buf(error_buf, error_buf_size,
                       "Init wasi environment failed: "
-                      "init fd table failed");
+                      "init fd table failed 1");
         goto fail;
     }
     fd_table_inited = true;
@@ -1987,15 +1996,26 @@ wasm_runtime_init_wasi(WASMModuleInstanceCommon *module_inst,
     argv_environ_inited = true;
 
     /* Prepopulate curfds with stdin, stdout, and stderr file descriptors. */
-    if (!fd_table_insert_existing(curfds, 0, (stdinfd != -1) ? stdinfd : 0)
-        || !fd_table_insert_existing(curfds, 1, (stdoutfd != -1) ? stdoutfd : 1)
-        || !fd_table_insert_existing(curfds, 2, (stderrfd != -1) ? stderrfd : 2)) {
-        set_error_buf(error_buf, error_buf_size,
-                      "Init wasi environment failed: init fd table failed");
+    /*if (temp_val = fd_table_insert_existing(curfds, 0, (stdinfd != -1) ? stdinfd : 0) != 0) {
+        snprintf(error_buf, error_buf_size,
+                         "Init wasi environment failed: init fd table failed with stdin %d and ret = %d",
+                         stdinfd, temp_val);
         goto fail;
     }
+    if (temp_val = fd_table_insert_existing(curfds, 1, (stdoutfd != -1) ? stdoutfd : 1) != 0) {
+        snprintf(error_buf, error_buf_size,
+                         "Init wasi environment failed: init fd table failed with stdout %d and ret = %d",
+                         stdoutfd, temp_val);
+        goto fail;
+    }
+    if (temp_val = fd_table_insert_existing(curfds, 2, (stderrfd != -1) ? stderrfd : 2) != 0) {
+        snprintf(error_buf, error_buf_size,
+                         "Init wasi environment failed: init fd table failed with stderr %d and ret = %d",
+                         stderrfd, temp_val);
+        goto fail;
+    }*/
 
-    wasm_fd = 3;
+    wasm_fd = 0;
     for (i = 0; i < dir_count; i++, wasm_fd++) {
         path = realpath(dir_list[i], resolved_path);
         if (!path) {
@@ -3132,11 +3152,21 @@ static V128FuncPtr invokeNative_V128 = (V128FuncPtr)(uintptr_t)invokeNative;
           || defined(BUILD_TARGET_RISCV64_LP64) */
 #endif /* end of defined(_WIN32) || defined(_WIN32_) */
 
+//#define __UNSAN_CALL_FUNCTION__
+
+#ifdef __UNSAN_CALL_FUNCTION__
+bool
+__unsan_wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
+                           const WASMType *func_type, const char *signature,
+                           void *attachment,
+                           uint32 *argv, uint32 argc, uint32 *argv_ret)
+#else
 bool
 wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
                            const WASMType *func_type, const char *signature,
                            void *attachment,
                            uint32 *argv, uint32 argc, uint32 *argv_ret)
+#endif
 {
     WASMModuleInstanceCommon *module = wasm_runtime_get_module_inst(exec_env);
     uint64 argv_buf[32], *argv1 = argv_buf, *ints, *stacks, size, arg_i64;
@@ -3331,6 +3361,17 @@ fail:
 
     return ret;
 }
+
+#ifdef __UNSAN_CALL_FUNCTION__
+bool
+wasm_runtime_invoke_native(WASMExecEnv *exec_env, void *func_ptr,
+                           const WASMType *func_type, const char *signature,
+                           void *attachment,
+                           uint32 *argv, uint32 argc, uint32 *argv_ret)
+{
+	return __unsan_wasm_runtime_invoke_native(exec_env, func_ptr, func_type, signature, attachment, argv, argc, argv_ret);
+}
+#endif
 
 #endif /* end of defined(BUILD_TARGET_X86_64) \
                  || defined(BUILD_TARGET_AMD_64) \

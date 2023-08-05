@@ -333,11 +333,23 @@ wasm_native_register_natives_raw(const char *module_name,
     return register_natives(module_name, native_symbols, n_native_symbols, true);
 }
 
+int ow_http_get(void *ptr);
+
 bool
 wasm_native_init()
 {
     NativeSymbol *native_symbols;
     uint32 n_native_symbols;
+
+    NativeSymbol http_get_symbol;
+
+    http_get_symbol.symbol = "get";
+    http_get_symbol.func_ptr = &ow_http_get;
+    http_get_symbol.signature = "(*)i";
+    http_get_symbol.attachment = NULL;
+    if (!wasm_native_register_natives("env",
+                                      &http_get_symbol, 1))
+        return false;
 
 #if WASM_ENABLE_LIBC_BUILTIN != 0
     n_native_symbols = get_libc_builtin_export_apis(&native_symbols);

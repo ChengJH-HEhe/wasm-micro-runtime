@@ -564,9 +564,13 @@ static void fd_object_release(
   }
 }
 
+#include <stdio.h>
+
+int printf(const char *fmt, ...);
+
 // Inserts an already existing file descriptor into the file descriptor
 // table.
-bool fd_table_insert_existing(
+int fd_table_insert_existing(
     struct fd_table *ft,
     __wasi_fd_t in,
     int out
@@ -575,19 +579,25 @@ bool fd_table_insert_existing(
   __wasi_rights_t rights_base, rights_inheriting;
   struct fd_object *fo;
   __wasi_errno_t error;
+  int temp_val;
 
-  if (fd_determine_type_rights(out, &type, &rights_base,
-                               &rights_inheriting) != 0)
-    return false;
+  if (temp_val = fd_determine_type_rights(out, &type, &rights_base,
+                               &rights_inheriting) != 0) {
+    printf("wrong type rights\n");
+    return temp_val;
+  }
 
   error = fd_object_new(type, &fo);
-  if (error != 0)
-    return false;
+  if (error != 0) {
+    printf("failed to fd_object_new\n");
+    return 2;
+  }
   fo->number = out;
   if (type == __WASI_FILETYPE_DIRECTORY) {
     if (!mutex_init(&fo->directory.lock)) {
+      printf("failed to mutex_init directory.lock\n");
       fd_object_release(fo);
-      return false;
+      return 3;
     }
     fo->directory.handle = NULL;
   }
@@ -596,13 +606,14 @@ bool fd_table_insert_existing(
   rwlock_wrlock(&ft->lock);
   if (!fd_table_grow(ft, in, 1)) {
     rwlock_unlock(&ft->lock);
+    printf("failed to fd_table_grow\n");
     fd_object_release(fo);
-    return false;
+    return 4;
   }
 
   fd_table_attach(ft, in, fo, rights_base, rights_inheriting);
   rwlock_unlock(&ft->lock);
-  return true;
+  return 0;
 }
 
 // Picks an unused slot from the file descriptor table.

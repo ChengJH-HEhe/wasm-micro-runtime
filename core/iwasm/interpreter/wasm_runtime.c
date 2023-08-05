@@ -17,6 +17,8 @@
 #include "../libraries/thread-mgr/thread_manager.h"
 #endif
 
+extern int printf(const char *fmt, ...);
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -1822,10 +1824,12 @@ wasm_module_malloc(WASMModuleInstance *module_inst, uint32 size,
     }
 
     if (memory->heap_handle) {
+        //printf("wasm_module_malloc: use %s\n", "mem_allocator_malloc");
         addr = mem_allocator_malloc(memory->heap_handle, size);
     }
     else if (module_inst->malloc_function
              && module_inst->free_function) {
+        printf("wasm_module_malloc: use %s\n", "module's malloc");
         if (!execute_malloc_function(module_inst,
                                      module_inst->malloc_function,
                                      module_inst->retain_function,
@@ -1848,6 +1852,7 @@ wasm_module_malloc(WASMModuleInstance *module_inst, uint32 size,
             wasm_set_exception(module_inst, "app heap corrupted");
         }
         else {
+            printf("wasm_module_malloc: addr = %s. size = %d\n", "NULL", size);
             wasm_set_exception(module_inst, "out of memory");
         }
         return 0;
@@ -1883,6 +1888,7 @@ wasm_module_realloc(WASMModuleInstance *module_inst, uint32 ptr, uint32 size,
             wasm_set_exception(module_inst, "app heap corrupted");
         }
         else {
+            printf("wasm_module_realloc: addr = %s\n", "NULL");
             wasm_set_exception(module_inst, "out of memory");
         }
         return 0;

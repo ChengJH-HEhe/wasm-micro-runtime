@@ -1007,7 +1007,7 @@ wasm_interp_call_func_bytecode(WASMModuleInstance *module,
   uint8 opcode_IMPDEP = WASM_OP_IMPDEP;
   WASMInterpFrame *frame = NULL;
   /* Points to this special opcode so as to jump to the call_method_from_entry.  */
-  register uint8  *frame_ip = &opcode_IMPDEP; /* cache of frame->ip */
+  register uint8  *frame_ip asm ("r12") = &opcode_IMPDEP; /* cache of frame->ip */
   register uint32 *frame_lp = NULL;  /* cache of frame->lp */
 #if WASM_ENABLE_LABELS_AS_VALUES != 0
 #if WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS == 0

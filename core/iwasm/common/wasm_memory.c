@@ -7,6 +7,8 @@
 #include "bh_platform.h"
 #include "mem_alloc.h"
 
+extern int printf(const char* fmt, ...);
+
 typedef enum Memory_Mode {
     MEMORY_MODE_UNKNOWN = 0,
     MEMORY_MODE_POOL,
@@ -97,9 +99,11 @@ wasm_runtime_malloc_internal(unsigned int size)
         return NULL;
     }
     else if (memory_mode == MEMORY_MODE_POOL) {
+	//printf("wasm_runtime_malloc_internal: %s\n", "POOL");
         return mem_allocator_malloc(pool_allocator, size);
     }
     else {
+	// printf("wasm_runtime_malloc_internal: %s(%d)\n", "system malloc", size);
         return malloc_func(size);
     }
 }

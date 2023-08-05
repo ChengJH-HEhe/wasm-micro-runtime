@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
  */
     .text
-    .align 2
+    .align 32
 #ifndef BH_PLATFORM_DARWIN
 .globl invokeNative
     .type    invokeNative, @function
@@ -59,6 +59,7 @@ push_args_end:
     movq 0x48(%rsi), %rsi
 
     call *%r11
+.align 32
     leave
     ret
 

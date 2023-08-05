@@ -41,11 +41,10 @@ os_free(void *ptr)
 
 int putchar(int c)
 {
-    return 0;
-}
-
-int puts(const char *s)
-{
+    char temp[2];
+    temp[0] = (char)c;
+    temp[1] = 0;
+    print_function(temp);
     return 0;
 }
 
@@ -65,6 +64,12 @@ int os_printf(const char *message, ...)
         print_function(msg);
     }
 
+    return 0;
+}
+
+int puts(const char *s)
+{
+    os_printf("%s", s);
     return 0;
 }
 

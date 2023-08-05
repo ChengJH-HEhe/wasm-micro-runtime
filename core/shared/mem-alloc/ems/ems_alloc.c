@@ -6,6 +6,8 @@
 #include "ems_gc_internal.h"
 
 
+extern int printf(const char *fmt, ...);
+
 static inline bool
 hmu_is_in_heap(void *hmu,
                gc_uint8 *heap_base_addr,
@@ -453,14 +455,17 @@ gc_alloc_vo_internal(void *vheap, gc_size_t size,
     gc_object_t ret = (gc_object_t) NULL;
     gc_size_t tot_size = 0, tot_size_unaligned;
 
+    //printf("gc_alloc_vo: %s\n", "Entering");
+
     /* hmu header + prefix + obj + suffix */
     tot_size_unaligned = HMU_SIZE + OBJ_PREFIX_SIZE + size + OBJ_SUFFIX_SIZE;
     /* aligned size*/
     tot_size = GC_ALIGN_8(tot_size_unaligned);
-    if (tot_size < size)
+    if (tot_size < size) {
         /* integer overflow */
+        printf("gc_alloc_vo: %s. tot_size < size\n", "int overflow");
         return NULL;
-
+    }
     if (heap->is_heap_corrupted) {
         os_printf("[GC_ERROR]Heap is corrupted, allocate memory failed.\n");
         return NULL;
@@ -469,8 +474,13 @@ gc_alloc_vo_internal(void *vheap, gc_size_t size,
     os_mutex_lock(&heap->lock);
 
     hmu = alloc_hmu_ex(heap, tot_size);
-    if (!hmu)
+    if (!hmu) {
+    	printf("gc_alloc_vo: %s\n", "hmu failed to alloc");
+    	if (heap->is_heap_corrupted) {
+    	    printf("gc_alloc_vo: %s\n", "heap is corrupted");
+    	}
         goto finish;
+    }
 
     bh_assert(hmu_get_size(hmu) >= tot_size);
     /* the total size allocated may be larger than

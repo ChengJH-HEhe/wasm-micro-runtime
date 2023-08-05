@@ -183,6 +183,8 @@ print_err(out_func_t out, void *ctx)
     out('R', ctx);
 }
 
+//extern void ocall_print(char *);
+
 static bool
 _vprintf_wa(out_func_t out, void *ctx, const char *fmt, _va_list ap,
             wasm_module_inst_t module_inst)
@@ -194,8 +196,10 @@ _vprintf_wa(out_func_t out, void *ctx, const char *fmt, _va_list ap,
     uint8 *native_end_addr;
 
     if (!wasm_runtime_get_native_addr_range(module_inst, (uint8*)ap,
-                                            NULL, &native_end_addr))
+                                            NULL, &native_end_addr)) {
+        //ocall_print("get_native_addr_range failed\n");
         goto fail;
+    }
 
     /* fmt has already been adjusted if needed */
 
@@ -1098,6 +1102,74 @@ clock_wrapper(wasm_exec_env_t exec_env)
     return os_time_get_boot_microsecond() * 1000;
 }
 
+#include <math.h>
+#include <stdlib.h>
+
+//#define __UNSAN_LIBC_MATH__
+
+#ifdef __UNSAN_LIBC_MATH__
+extern double __unsan_pow(double x, double y);
+extern double __unsan_sin(double x);
+extern double __unsan_cos(double x);
+#endif
+
+static long
+atol_wrapper(wasm_exec_env_t exec_env, const char *nptr) {
+    return atol(nptr);
+}
+
+static uint64
+pow_wrapper(wasm_exec_env_t exec_env, double x, double y) {
+#ifdef __UNSAN_LIBC_MATH__
+    double retval = __unsan_pow(x, y);
+#else
+    double retval = pow(x, y);
+#endif
+    uint64 *ret_ptr = (void *)&retval;
+    //printf("pow_wrapper: x = %f, y = %f, pow(x, y) = %f\n", x, y, retval);
+    return *ret_ptr;
+}
+
+static uint64
+cos_wrapper(wasm_exec_env_t exec_env, double x) {
+#ifdef __UNSAN_LIBC_MATH__
+    double retval = __unsan_cos(x);
+#else
+    double retval = cos(x);
+#endif
+    uint64 *ret_ptr = (void *)&retval;
+    //printf("cos_wrapper: x = %f, cos(x) = %f\n", x, retval);
+    return *ret_ptr;
+}
+
+static uint64
+sin_wrapper(wasm_exec_env_t exec_env, double x) {
+#ifdef __UNSAN_LIBC_MATH__
+    double retval = __unsan_sin(x);
+#else
+    double retval = sin(x);
+#endif
+    uint64 *ret_ptr = (void *)&retval;
+    //printf("sin_wrapper: x = %f, sin(x) = %f\n", x, retval);
+    return *ret_ptr;
+}
+
+static uint64
+exp_wrapper(wasm_exec_env_t exec_env, double x) {
+    double retval = exp(x);
+    uint64 *ret_ptr = (void *)&retval;
+    //printf("exp_wrapper: x = %f, exp(x) = %f\n", x, retval);
+    return *ret_ptr;
+}
+
+static uint64
+atof_wrapper(wasm_exec_env_t exec_env, const char *nptr) {
+    double retval = atof(nptr);
+    uint64 *ret_ptr = (void *)&retval;
+    //printf("atof_wrapper: nptr = %s, atof(nptr) = %f\n", nptr, retval);
+    return *ret_ptr;
+}
+
 #if WASM_ENABLE_SPEC_TEST != 0
 static void
 print_wrapper(wasm_exec_env_t exec_env)
@@ -1199,6 +1271,12 @@ static NativeSymbol native_symbols_libc_builtin[] = {
     REG_NATIVE_FUNC(__cxa_throw, "(**i)"),
     REG_NATIVE_FUNC(clock_gettime, "(i*)i"),
     REG_NATIVE_FUNC(clock, "()I"),
+    REG_NATIVE_FUNC(atol, "($)i"),
+    REG_NATIVE_FUNC(pow, "(FF)F"),
+    REG_NATIVE_FUNC(sin, "(F)F"),
+    REG_NATIVE_FUNC(cos, "(F)F"),
+    REG_NATIVE_FUNC(exp, "(F)F"),
+    REG_NATIVE_FUNC(atof, "($)F"),
 };
 
 #if WASM_ENABLE_SPEC_TEST != 0

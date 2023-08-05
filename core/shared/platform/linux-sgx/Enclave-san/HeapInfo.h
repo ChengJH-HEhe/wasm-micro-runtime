@@ -1,0 +1,1 @@
+#define _WASM_HEAP_SIZE	(400 * 1024 * 1024)

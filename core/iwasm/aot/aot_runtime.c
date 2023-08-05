@@ -618,6 +618,8 @@ aot_get_default_memory(AOTModuleInstance *module_inst)
         return NULL;
 }
 
+extern int printf(const char *fmt, ...);
+
 static bool
 memories_instantiate(AOTModuleInstance *module_inst, AOTModule *module,
                      uint32 heap_size, char *error_buf, uint32 error_buf_size)
@@ -628,12 +630,16 @@ memories_instantiate(AOTModuleInstance *module_inst, AOTModule *module,
     AOTMemInitData *data_seg;
     uint64 total_size;
 
+    //printf("%s", "memories_instantiate: Entering!\n");
+
     module_inst->memory_count = memory_count;
     total_size = sizeof(AOTPointer) * (uint64)memory_count;
     if (!(module_inst->memories.ptr =
             runtime_malloc(total_size, error_buf, error_buf_size))) {
         return false;
     }
+    
+    //printf("%s", "memories_instantiate: 1\n");
 
     memories = module_inst->global_table_data.memory_instances;
     for (i = 0; i < memory_count; i++, memories++) {
@@ -647,15 +653,21 @@ memories_instantiate(AOTModuleInstance *module_inst, AOTModule *module,
 
         ((AOTMemoryInstance **)module_inst->memories.ptr)[i] = memory_inst;
     }
+    
+    //printf("%s", "memories_instantiate: 2\n");
 
     /* Get default memory instance */
     memory_inst = aot_get_default_memory(module_inst);
 
+    //printf("memories_instantiate: mem_init_data_count = %d\n", module->mem_init_data_count);
+    
     for (i = 0; i < module->mem_init_data_count; i++) {
         data_seg = module->mem_init_data_list[i];
 #if WASM_ENABLE_BULK_MEMORY != 0
-        if (data_seg->is_passive)
-            continue;
+        //if (data_seg->is_passive) {
+        //    printf("memories_instantiate: %s\n", "passive");
+        //    continue;
+        //}
 #endif
 
         bh_assert(data_seg->offset.init_expr_type ==
@@ -669,6 +681,7 @@ memories_instantiate(AOTModuleInstance *module_inst, AOTModule *module,
 
             if (!check_global_init_expr(module, global_index,
                                         error_buf, error_buf_size)) {
+                //printf("memories_instantiate: failed at %s\n", "check_global_init_expr");
                 return false;
             }
 
@@ -686,6 +699,10 @@ memories_instantiate(AOTModuleInstance *module_inst, AOTModule *module,
         else {
             base_offset = (uint32)data_seg->offset.u.i32;
         }
+
+        //printf("%s", "memories_instantiate: Ready to copy data\n");
+        
+        //printf("memories_instantiate: base_offset = 0x%016lX\n", (uint64)base_offset);
 
         /* Copy memory data */
         bh_assert(memory_inst->memory_data.ptr
@@ -725,6 +742,8 @@ memories_instantiate(AOTModuleInstance *module_inst, AOTModule *module,
             bh_memcpy_s((uint8*)memory_inst->memory_data.ptr + base_offset,
                         memory_inst->memory_data_size - base_offset,
                         data_seg->bytes, length);
+            //printf("memories_instantiate: memory_data.ptr = 0x%016lX\n", (uint64)memory_inst->memory_data.ptr);
+            //printf("memories_instantiate: base_offset = 0x%016lX\n", (uint64)base_offset);
         }
     }
 
@@ -1411,10 +1430,19 @@ invoke_native_with_hw_bound_check(WASMExecEnv *exec_env, void *func_ptr,
 #define invoke_native_internal wasm_runtime_invoke_native
 #endif /* end of OS_ENABLE_HW_BOUND_CHECK */
 
+//#define __UNSAN_CALL_FUNCTION__
+
+#ifdef __UNSAN_CALL_FUNCTION__
+bool
+__unsan_aot_call_function(WASMExecEnv *exec_env,
+                  AOTFunctionInstance *function,
+                  unsigned argc, uint32 argv[])
+#else
 bool
 aot_call_function(WASMExecEnv *exec_env,
                   AOTFunctionInstance *function,
                   unsigned argc, uint32 argv[])
+#endif
 {
     AOTModuleInstance *module_inst = (AOTModuleInstance*)exec_env->module_inst;
     AOTFuncType *func_type = function->u.func.func_type;
@@ -1546,6 +1574,15 @@ aot_call_function(WASMExecEnv *exec_env,
         return ret && !aot_get_exception(module_inst) ? true : false;
     }
 }
+
+#ifdef __UNSAN_CALL_FUNCTION__
+bool
+aot_call_function(WASMExecEnv *exec_env,
+                  AOTFunctionInstance *function,
+                  unsigned argc, uint32 argv[]) {
+	return __unsan_aot_call_function(exec_env, function, argc, argv);
+}
+#endif
 
 bool
 aot_create_exec_env_and_call_function(AOTModuleInstance *module_inst,
@@ -1947,6 +1984,8 @@ fail:
     return false;
 }
 
+extern int printf(const char* fmt, ...);
+
 void *
 aot_addr_app_to_native(AOTModuleInstance *module_inst, uint32 app_offset)
 {
@@ -1958,6 +1997,8 @@ aot_addr_app_to_native(AOTModuleInstance *module_inst, uint32 app_offset)
     }
 
     addr = (uint8 *)memory_inst->memory_data.ptr + app_offset;
+    
+    //printf("aot_addr_app_to_native: app_offset = 0x%08X, real addr = 0x%016lX\n", app_offset, (uint64)addr);
 
     if ((uint8 *)memory_inst->memory_data.ptr <= addr
         && addr < (uint8 *)memory_inst->memory_data_end.ptr)
@@ -2443,6 +2484,8 @@ aot_memory_init(AOTModuleInstance *module_inst, uint32 seg_index,
     uint8 *data = NULL;
     uint8 *maddr;
     uint64 seg_len = 0;
+    
+    //printf("aot_memory_init: Entering\n\n");
 
     aot_module = (AOTModule *)module_inst->aot_module.ptr;
     if (aot_module->is_jit_mode) {

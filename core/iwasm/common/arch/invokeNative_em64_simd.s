@@ -59,6 +59,7 @@ push_args_end:
     movq 0x88(%rsi), %rsi
 
     call *%r11
+.align 32
     leave
     ret
 

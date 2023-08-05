@@ -9,6 +9,7 @@ enclave {
     include "unistd.h"
 
     untrusted {
+        int ocall_http_get([user_check]void *ptr);
         int ocall_open([in, string]const char *pathname, int flags,
                        bool has_mode, unsigned mode);
         int ocall_openat(int dirfd,

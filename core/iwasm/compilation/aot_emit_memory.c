@@ -162,6 +162,8 @@ aot_check_memory_overflow(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     /* offset1 = offset + addr; */
     BUILD_OP(Add, offset_const, addr, offset1, "offset1");
 
+    //os_printf("enable_bound_check = %d\n", comp_ctx->enable_bound_check);
+
     if (comp_ctx->enable_bound_check
         && !(is_local_of_aot_value
              && aot_checked_addr_list_find(func_ctx, local_idx_of_aot_value,
@@ -358,6 +360,7 @@ aot_compile_op_i32_load(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
 {
     LLVMValueRef maddr, value = NULL;
 
+    //os_printf("i32 load!\n");
     if (!(maddr = aot_check_memory_overflow(comp_ctx, func_ctx, offset, bytes)))
         return false;
 
@@ -499,6 +502,8 @@ aot_compile_op_i32_store(AOTCompContext *comp_ctx, AOTFuncContext *func_ctx,
     LLVMValueRef maddr, value;
 
     POP_I32(value);
+
+    //os_printf("i32 store!\n");
 
     if (!(maddr = aot_check_memory_overflow(comp_ctx, func_ctx, offset, bytes)))
         return false;

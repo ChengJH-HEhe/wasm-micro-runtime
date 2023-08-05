@@ -290,6 +290,7 @@ longjmp_wrapper(wasm_exec_env_t exec_env,
 }
 
 #if !defined(BH_PLATFORM_LINUX_SGX)
+
 static FILE *file_list[32] = { 0 };
 
 static int

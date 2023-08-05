@@ -1307,9 +1307,13 @@ aot_create_comp_context(AOTCompData *comp_data,
         comp_ctx->target_machine =
                 LLVMGetExecutionEngineTargetMachine(comp_ctx->exec_engine);
 #ifndef OS_ENABLE_HW_BOUND_CHECK
+#warning "ENABLE HW BOUND CHECK ndef"
         comp_ctx->enable_bound_check = true;
+	//os_printf("enable bound check = %d\n", comp_ctx->enable_bound_check);
 #else
+#warning "ENABLE HW BC"
         comp_ctx->enable_bound_check = false;
+	//os_printf("enable bound check = %d\n", comp_ctx->enable_bound_check);
 #endif
 
         if (!(triple_jit =
@@ -1906,6 +1910,8 @@ aot_checked_addr_list_add(AOTFuncContext *func_ctx,
     node->offset = offset;
     node->bytes = bytes;
 
+    //os_printf("add: local_idx = %d, offset = 0x%08X, bytes = %d\n", local_idx, offset, bytes);
+    
     node->next = func_ctx->checked_addr_list;
     func_ctx->checked_addr_list = node;
     return true;
@@ -1945,7 +1951,8 @@ aot_checked_addr_list_find(AOTFuncContext *func_ctx,
         if (node->local_idx == local_idx
             && node->offset == offset
             && node->bytes >= bytes) {
-            return true;
+            //os_printf("loacl_idx = %d, offset  0x%08X, bytes = %d, real bytes = %d\n", local_idx, offset, node->bytes, bytes);
+	    return true;
         }
         node = node->next;
     }

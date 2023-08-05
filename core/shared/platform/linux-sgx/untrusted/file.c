@@ -22,11 +22,16 @@
 int ocall_open(const char *pathname, int flags,
                bool has_mode, unsigned mode)
 {
+    int retval;
     if (has_mode) {
-        return open(pathname, flags, (mode_t)mode);
+        retval = open(pathname, flags, (mode_t)mode);
+        //printf("open returned %d\n", retval);
+        return retval;
     }
     else {
-        return open(pathname, flags);
+        retval =  open(pathname, flags);
+        //printf("open returned %d\n", retval);
+        return retval;
     }
 }
 

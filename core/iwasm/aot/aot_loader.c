@@ -18,6 +18,9 @@
 #define XMM_PLT_PREFIX "__xmm@"
 #define REAL_PLT_PREFIX "__real@"
 
+
+extern int printf(const char* fmt, ...);
+
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
@@ -524,6 +527,8 @@ load_mem_init_data_list(const uint8 **p_buf, const uint8 *buf_end,
         data_list[i]->byte_count = byte_count;
         read_byte_array(buf, buf_end,
                         data_list[i]->bytes, data_list[i]->byte_count);
+        //printf("load_mem_init_data_list: data_list[%d]->bytes = 0x%016lX\n", i, (uint64)data_list[i]->bytes);
+        //printf("load_mem_init_data_list: buf = 0x%016lX\n", *(uint64*)data_list[i]->bytes);
     }
 
     *p_buf = buf;
@@ -551,6 +556,8 @@ load_memory_info(const uint8 **p_buf, const uint8 *buf_end,
             loader_malloc(total_size, error_buf, error_buf_size))) {
         return false;
     }
+    
+    //printf("load_memory_info: module->memory_count = %d\n", module->memory_count);
 
     for (i = 0; i < module->memory_count; i++) {
         read_uint32(buf, buf_end, module->memories[i].memory_flags);
@@ -1113,6 +1120,8 @@ load_object_data_sections(const uint8 **p_buf, const uint8 *buf_end,
     AOTObjectDataSection *data_sections;
     uint64 size;
     uint32 i;
+    
+    //printf("load_object_data_sections: %s\n", "Entering");
 
     /* Allocate memory */
     size = sizeof(AOTObjectDataSection) * (uint64)module->data_section_count;
@@ -1152,7 +1161,6 @@ load_object_data_sections(const uint8 **p_buf, const uint8 *buf_end,
         bh_assert((uintptr_t)data_sections[i].data < INT32_MAX);
 #endif
 #endif
-
         read_byte_array(buf, buf_end,
                         data_sections[i].data, data_sections[i].size);
     }
@@ -1170,7 +1178,11 @@ load_object_data_sections_info(const uint8 **p_buf, const uint8 *buf_end,
 {
     const uint8 *buf = *p_buf;
 
+    //printf("load_object_data_sections_info: %s\n", "Entering");
+
     read_uint32(buf, buf_end, module->data_section_count);
+    
+    //printf("load_object_data_sections_info: module->data_section_count = %d\n", module->data_section_count);
 
     /* load object data sections */
     if (module->data_section_count > 0
@@ -1190,6 +1202,8 @@ load_init_data_section(const uint8 *buf, const uint8 *buf_end,
                        char *error_buf, uint32 error_buf_size)
 {
     const uint8 *p = buf, *p_end = buf_end;
+    
+    //printf("load_init_data_section: %s\n", "Entering");
 
     if (!load_memory_info(&p, p_end, module, error_buf, error_buf_size)
         || !load_table_info(&p, p_end, module, error_buf, error_buf_size)
@@ -2361,6 +2375,7 @@ create_sections(AOTModule *module,
     uint32 section_type;
     uint32 section_size;
     uint64 total_size;
+    uint32 literal_data_size;
     uint8 *aot_text;
 
     if (!resolve_native_symbols(buf, size, &native_symbol_count,
@@ -2403,14 +2418,24 @@ create_sections(AOTModule *module,
 #endif
                     total_size = (uint64)section_size + aot_get_plt_table_size();
                     total_size = (total_size + 3) & ~((uint64)3);
-                    if (total_size >= UINT32_MAX
-                        || !(aot_text = os_mmap(NULL, (uint32)total_size,
+                    if (total_size >= UINT32_MAX - 32
+                        || !(aot_text = os_mmap(NULL, (uint32)(total_size + 32),
                                                 map_prot, map_flags))) {
                         wasm_runtime_free(section);
                         set_error_buf(error_buf, error_buf_size,
                                       "mmap memory failed");
                         goto fail;
                     }
+                    literal_data_size = *((uint32 *)section->section_body);
+                    literal_data_size += sizeof(uint32);
+                    literal_data_size %= 32;
+		    printf("literal_data_size = 0x%08X\n", literal_data_size);
+                    // We want (aot_text + literal_data_size) % 32 = 0
+                    literal_data_size += (uint32)aot_text;
+                    literal_data_size %= 32;
+                    literal_data_size = 32 - literal_data_size;
+                    aot_text += literal_data_size;
+		    printf("aot_text = 0x%016lX\n", (uint64_t)aot_text);
 #if defined(BUILD_TARGET_X86_64) || defined(BUILD_TARGET_AMD_64)
 #if !defined(BH_PLATFORM_LINUX_SGX) && !defined(BH_PLATFORM_WINDOWS) \
     && !defined(BH_PLATFORM_DARWIN)

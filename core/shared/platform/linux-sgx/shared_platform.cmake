@@ -9,7 +9,9 @@ include_directories(${PLATFORM_SHARED_DIR})
 include_directories(${PLATFORM_SHARED_DIR}/../include)
 
 if ("$ENV{SGX_SDK}" STREQUAL "")
-  set (SGX_SDK_DIR "/opt/intel/sgxsdk")
+  if (${SGX_SDK_DIR} EQUAL "")
+    set (SGX_SDK_DIR "/opt/intel/sgxsdk")
+  endif()
 else()
   set (SGX_SDK_DIR $ENV{SGX_SDK})
 endif()
@@ -30,7 +32,7 @@ endif ()
 
 file (GLOB source_all ${PLATFORM_SHARED_DIR}/*.c)
 
-file (GLOB source_all_untrusted ${PLATFORM_SHARED_DIR}/untrusted/*.c)
+file (GLOB source_all_untrusted ${PLATFORM_SHARED_DIR}/untrusted/*.c ${PLATFORM_SHARED_DIR}/untrusted/*.cpp)
 
 set (PLATFORM_SHARED_SOURCE ${source_all})
 
