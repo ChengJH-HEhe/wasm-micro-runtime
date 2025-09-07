@@ -11,6 +11,9 @@ SEARCH_DIR("/usr/local/x86_64-pc-linux-gnu/lib64"); SEARCH_DIR("/usr/local/lib64
 SECTIONS
 {
   PROVIDE (__executable_start = SEGMENT_START("text-segment", 0)); . = SEGMENT_START("text-segment", 0) + SIZEOF_HEADERS;
+  
+  /* Layer 1: System/Dynamic sections (highest security) */
+  PROVIDE (__layer1_start = .);
   .interp         : { *(.interp) }
   .note.gnu.build-id  : { *(.note.gnu.build-id) }
   .hash           : { *(.hash) }
@@ -20,11 +23,19 @@ SECTIONS
   .gnu.version    : { *(.gnu.version) }
   .gnu.version_d  : { *(.gnu.version_d) }
   .gnu.version_r  : { *(.gnu.version_r) }
+  
   .nskernel.attest : { *(.nskernel.attest) }
   .nskernel.atheap : { *(.nskernel.atheap) }
   .nskernel.atstck : { *(.nskernel.atstck) }
+  /* Layer 2: NSKernel sections (medium security) */
+  PROVIDE (__layer1_end = .);
+  PROVIDE (__layer2_start = .);
   .nskernel.rollbk : { *(.nskernel.rollbk) }
   .nskernel.databk : { *(.nskernel.databk) }
+  
+  /* Layer 3: Core sections (lowest security) */
+  PROVIDE (__layer2_end = .);
+  PROVIDE (__layer3_start = .);
   .rela.dyn       :
     {
       *(.rela.init)
@@ -200,6 +211,7 @@ SECTIONS
   }
   . = ALIGN(64 / 8);
   _end = .; PROVIDE (end = .);
+  PROVIDE (__layer3_end = .);
   . = DATA_SEGMENT_END (.);
   /* Stabs debugging sections.  */
   .stab          0 : { *(.stab) }

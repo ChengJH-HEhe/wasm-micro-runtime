@@ -11,6 +11,8 @@
 #include "Enclave_t.h"
 #include "wasm_export.h"
 #include "bh_platform.h"
+#include "r15_protection.h"
+#include "enclave_function_layers.h"
 
 #include "sgx_eid.h"
 #include "EnclaveMessageExchange.h"
@@ -39,22 +41,33 @@ sgx_measurement_t g_gateway_mrsigner = {
  * */
  uint32_t verify_peer_enclave_trust(sgx_dh_session_enclave_identity_t* peer_enclave_identity)
 {
-    if(!peer_enclave_identity)
+    __unsan_layer1_enter();
+    
+    if(!peer_enclave_identity) {
+        __unsan_layer_exit();
         return INVALID_PARAMETER_ERROR;
+    }
 
     // check peer enclave's MRSIGNER
-    if (memcmp((uint8_t *)&peer_enclave_identity->mr_signer, (uint8_t*)&g_gateway_mrsigner, sizeof(sgx_measurement_t)))
+    if (memcmp((uint8_t *)&peer_enclave_identity->mr_signer, (uint8_t*)&g_gateway_mrsigner, sizeof(sgx_measurement_t))) {
+        __unsan_layer_exit();
         return ENCLAVE_TRUST_ERROR;
+    }
 
-    if(peer_enclave_identity->isv_prod_id != 0 || !(peer_enclave_identity->attributes.flags & SGX_FLAGS_INITTED))
+    if(peer_enclave_identity->isv_prod_id != 0 || !(peer_enclave_identity->attributes.flags & SGX_FLAGS_INITTED)) {
+        __unsan_layer_exit();
         return ENCLAVE_TRUST_ERROR;
+    }
 
     // check the enclave isn't loaded in enclave debug mode, except that the project is built for debug purpose
 #if defined(NDEBUG)
-    if (peer_enclave_identity->attributes.flags & SGX_FLAGS_DEBUG)
+    if (peer_enclave_identity->attributes.flags & SGX_FLAGS_DEBUG) {
+        __unsan_layer_exit();
         return ENCLAVE_TRUST_ERROR;
+    }
 #endif
 
+    __unsan_layer_exit();
     return SUCCESS;
 }
 
@@ -83,8 +96,8 @@ int printf(const char* fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, BUFSIZ, fmt, ap);
     va_end(ap);
-    ocall_print(buf);
-    return (int)strnlen(buf, BUFSIZ - 1) + 1;
+    enclave_print(buf);
+    return (int)strnlen(buf, BUFSIZ);
 }
 
 typedef enum EcallCmd {
@@ -132,8 +145,12 @@ char global_heap_buf[_WASM_HEAP_SIZE] __attribute__((section(".wasm.heap"))) __a
 static void
 set_error_buf(char *error_buf, uint32 error_buf_size, const char *string)
 {
+    __unsan_layer3_enter();
+    
     if (error_buf != NULL)
         snprintf(error_buf, error_buf_size, "%s", string);
+        
+    __unsan_layer_exit();
 }
 
 char outside_print_buffer[100];
@@ -142,6 +159,8 @@ char outside_print_buffer[100];
 static void
 handle_cmd_lookup_function(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst;
     char *name;
     char *signature;
@@ -156,11 +175,15 @@ handle_cmd_lookup_function(uint64 *args, uint32 argc)
     ret_val = wasm_runtime_lookup_function(module_inst, name, signature);
 
     args[0] = (uint64)ret_val;
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_copy_pointer(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst;
     uint32 app_offset;
     size_t len;
@@ -183,16 +206,25 @@ handle_cmd_copy_pointer(uint64 *args, uint32 argc)
         goto out;
     }
 
-    // Copy to external buffer
-    memcpy(external_buffer, internal_buffer, len);
+    // Copy to external buffer - using Layer 2 memcpy for safety
+    {
+        uint64_t saved_r15;
+        SAVE_R15(saved_r15);
+        SET_R15_BOUNDARY(R15_BOUNDARY_1);
+        memcpy(external_buffer, internal_buffer, len);
+        RESTORE_R15(saved_r15);
+    }
 
 out:
     args[0] = (uint64)ret_val;
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_copy_to_wasm(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst;
     uint32 app_offset;
     size_t len;
@@ -215,16 +247,25 @@ handle_cmd_copy_to_wasm(uint64 *args, uint32 argc)
         goto out;
     }
 
-    // Copy to external buffer
-    memcpy(internal_buffer, external_buffer, len);
+    // Copy to internal buffer - using Layer 2 memcpy for safety
+    {
+        uint64_t saved_r15;
+        SAVE_R15(saved_r15);
+        SET_R15_BOUNDARY(R15_BOUNDARY_1);
+        memcpy(internal_buffer, external_buffer, len);
+        RESTORE_R15(saved_r15);
+    }
 
 out:
     args[0] = (uint64)ret_val;
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_lookup_wasi_start_function(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst;
     wasm_function_inst_t ret_val;
 
@@ -235,11 +276,15 @@ handle_cmd_lookup_wasi_start_function(uint64 *args, uint32 argc)
     ret_val = wasm_runtime_lookup_wasi_start_function(module_inst);
 
     args[0] = (uint64)ret_val;
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_create_exec_env(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst;
     uint32 stack_size;
     wasm_exec_env_t ret_val;
@@ -252,11 +297,15 @@ handle_cmd_create_exec_env(uint64 *args, uint32 argc)
     ret_val = wasm_runtime_create_exec_env(module_inst, stack_size);
 
     args[0] = (uint64)ret_val;
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_destroy_exec_env(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_exec_env_t exec_env;
 
     bh_assert(argc == 1);
@@ -264,11 +313,15 @@ handle_cmd_destroy_exec_env(uint64 *args, uint32 argc)
     exec_env = (wasm_exec_env_t )(args[0]);
 
     wasm_runtime_destroy_exec_env(exec_env);
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_call_wasm_a(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_exec_env_t exec_env;
     wasm_function_inst_t function;
     uint32 num_results;
@@ -289,11 +342,15 @@ handle_cmd_call_wasm_a(uint64 *args, uint32 argc)
     ret_val = wasm_runtime_call_wasm_a(exec_env, function, num_results, results, num_args, wasm_args);
 
     args[0] = (uint64)ret_val;
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_init_runtime(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     bool alloc_with_pool;
     uint32 max_thread_num;
     RuntimeInitArgs init_args;
@@ -315,7 +372,13 @@ handle_cmd_init_runtime(uint64 *args, uint32 argc)
 #endif
     max_thread_num = (uint32)args[1];
 
-    memset(&init_args, 0, sizeof(RuntimeInitArgs));
+    // Use Layer 2 protection for memset of critical runtime structure
+    {
+        __unsan_layer2_enter();
+        memset(&init_args, 0, sizeof(RuntimeInitArgs));
+        __unsan_layer_exit();
+    }
+    
     init_args.max_thread_num = max_thread_num;
     //alloc_with_pool = false;
     if (alloc_with_pool) {
@@ -333,20 +396,26 @@ handle_cmd_init_runtime(uint64 *args, uint32 argc)
     if (!wasm_runtime_full_init(&init_args)) {
         printf("Init runtime environment failed.\n");
         args[0] = false;
+        __unsan_layer_exit();
         return;
     }
 
     args[0] = true;
 
     LOG_VERBOSE("Init runtime environment success.\n");
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_destroy_runtime()
 {
+    __unsan_layer3_enter();
+    
     wasm_runtime_destroy();
 
     LOG_VERBOSE("Destroy runtime success.\n");
+    
+    __unsan_layer_exit();
 }
 
 
@@ -359,6 +428,8 @@ extern uint32_t last_session_id;
 static void
 handle_cmd_load_module(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+
     uint64 *args_org = args;
     char *wasm_file_encrypted = *(char **)args++;
     char *wasm_file;
@@ -375,6 +446,7 @@ handle_cmd_load_module(uint64 *args, uint32 argc)
     if (decrypt_wasm_file(wasm_file_encrypted, wasm_file_size_encrypted, &wasm_file, (size_t *)&wasm_file_size, last_session_id)) {
         set_error_buf(error_buf, error_buf_size, "WASM module load failed: failed to decrypt");
         *(void **)args_org = NULL;
+        __unsan_layer_exit();
         return;
     }
     
@@ -390,10 +462,17 @@ handle_cmd_load_module(uint64 *args, uint32 argc)
         //printf("enclave_module = 0x%016llX\n", enclave_module);
         free(wasm_file);
         *(void **)args_org = NULL;
+        __unsan_layer_exit();
         return;
     }
 
-    memset(enclave_module, 0, (uint32)total_size);
+    // Use Layer 2 protection for memset of EnclaveModule structure
+    {
+        __unsan_layer2_enter();
+        memset(enclave_module, 0, (uint32)total_size);
+        __unsan_layer_exit();
+    }
+    
     enclave_module->wasm_file = (uint8 *)enclave_module
                                 + sizeof(EnclaveModule);
     printf("enclave_module->wasm_file = 0x%016llX\n", (uint64_t)enclave_module->wasm_file);
@@ -408,17 +487,21 @@ handle_cmd_load_module(uint64 *args, uint32 argc)
                                   error_buf, error_buf_size))) {
         wasm_runtime_free(enclave_module);
         *(void **)args_org = NULL;
+        __unsan_layer_exit();
         return;
     }
     
     *(EnclaveModule **)args_org = enclave_module;
 
     LOG_VERBOSE("Load module success.\n");
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_unload_module(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     EnclaveModule *enclave_module = *(EnclaveModule **)args++;
     uint32 i;
 
@@ -431,11 +514,15 @@ handle_cmd_unload_module(uint64 *args, uint32 argc)
     wasm_runtime_free(enclave_module);
 
     LOG_VERBOSE("Unload module success.\n");
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_instantiate_module(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     uint64 *args_org = args;
     EnclaveModule *enclave_module = *(EnclaveModule **)args++;
     uint32 stack_size = *(uint32 *)args++;
@@ -451,17 +538,22 @@ handle_cmd_instantiate_module(uint64 *args, uint32 argc)
                                          stack_size, heap_size,
                                          error_buf, error_buf_size))) {
         *(void **)args_org = NULL;
+        __unsan_layer_exit();
         return;
     }
 
     *(wasm_module_inst_t *)args_org = module_inst;
 
     LOG_VERBOSE("Instantiate module success.\n");
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_deinstantiate_module(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst = *(wasm_module_inst_t *)args++;
 
     bh_assert(argc == 1);
@@ -469,11 +561,15 @@ handle_cmd_deinstantiate_module(uint64 *args, uint32 argc)
     wasm_runtime_deinstantiate(module_inst);
 
     LOG_VERBOSE("Deinstantiate module success.\n");
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_get_exception(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
     uint64 *args_org = args;
     wasm_module_inst_t module_inst = *(wasm_module_inst_t *)args++;
     char *exception = *(char **)args++;
@@ -490,11 +586,15 @@ handle_cmd_get_exception(uint64 *args, uint32 argc)
     else {
         args_org[0] = false;
     }
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_exec_app_main(uint64 *args, int32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst = *(wasm_module_inst_t *)args++;
     uint32 app_argc = *(uint32 *)args++;
     char **app_argv = NULL;
@@ -509,6 +609,7 @@ handle_cmd_exec_app_main(uint64 *args, int32 argc)
     if (total_size >= UINT32_MAX
         || !(app_argv = (char **)wasm_runtime_malloc(total_size))) {
         wasm_runtime_set_exception(module_inst, "allocate memory failed.");
+        __unsan_layer_exit();
         return;
     }
 
@@ -519,11 +620,15 @@ handle_cmd_exec_app_main(uint64 *args, int32 argc)
     wasm_application_execute_main(module_inst, app_argc - 1, app_argv + 1);
 
     wasm_runtime_free(app_argv);
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_exec_app_func(uint64 *args, int32 argc)
 {
+    __unsan_layer3_enter();
+    
     wasm_module_inst_t module_inst = *(wasm_module_inst_t *)args++;
     char *func_name = *(char **)args++;
     uint32 app_argc = *(uint32 *)args++;
@@ -538,6 +643,7 @@ handle_cmd_exec_app_func(uint64 *args, int32 argc)
     if (total_size >= UINT32_MAX
         || !(app_argv = (char **)wasm_runtime_malloc(total_size))) {
         wasm_runtime_set_exception(module_inst, "allocate memory failed.");
+        __unsan_layer_exit();
         return;
     }
 
@@ -548,21 +654,29 @@ handle_cmd_exec_app_func(uint64 *args, int32 argc)
     wasm_application_execute_func(module_inst, func_name, app_argc, app_argv);
 
     wasm_runtime_free(app_argv);
+    
+    __unsan_layer_exit();
 }
 
 static void
 handle_cmd_set_log_level(uint64 *args, uint32 argc)
 {
+    __unsan_layer3_enter();
+    
 #if WASM_ENABLE_LOG != 0
     LOG_VERBOSE("Set log verbose level to %d.\n", (int)args[0]);
     bh_log_set_verbose_level((int)args[0]);
 #endif
+
+    __unsan_layer_exit();
 }
 
 #ifndef SGX_DISABLE_WASI
 static void
 handle_cmd_set_wasi_args(uint64 *args, int32 argc)
 {
+    __unsan_layer3_enter();
+    
     uint64 *args_org = args;
     EnclaveModule *enclave_module = (EnclaveModule *)(args[0]);
     char **dir_list = (char **)(args[1]);
@@ -600,6 +714,7 @@ handle_cmd_set_wasi_args(uint64 *args, int32 argc)
         || !(enclave_module->wasi_arg_buf = p = (char *)
                     wasm_runtime_malloc((uint32)total_size))) {
         *args_org = false;
+        __unsan_layer_exit();
         return;
     }
 
@@ -656,12 +771,15 @@ handle_cmd_set_wasi_args(uint64 *args, int32 argc)
                                   (stderrfd != -1) ? stderrfd : 2);
 
     *args_org = true;
+    __unsan_layer_exit();
 }
 #else
 static void
 handle_cmd_set_wasi_args(uint64 *args, int32 argc)
 {
+    __unsan_layer3_enter();
     *args = true;
+    __unsan_layer_exit();
 }
 #endif /* end of SGX_DISABLE_WASI */
 
@@ -670,6 +788,8 @@ ecall_handle_command(unsigned cmd,
                      unsigned char *cmd_buf,
                      unsigned cmd_buf_size)
 {
+    __unsan_layer2_enter();
+    
     uint64 *args = (uint64 *)cmd_buf;
     uint32 argc = cmd_buf_size / sizeof(uint64);
 
@@ -732,11 +852,15 @@ ecall_handle_command(unsigned cmd,
             LOG_ERROR("Unknown command %d\n", cmd);
             break;
     }
+    
+    __unsan_layer_exit();
 }
 
 void
 ecall_iwasm_main(uint8_t *wasm_file_buf, uint32_t wasm_file_size)
 {
+    __unsan_layer2_enter();
+    
     wasm_module_t wasm_module = NULL;
     wasm_module_inst_t wasm_module_inst = NULL;
     RuntimeInitArgs init_args;
@@ -745,7 +869,14 @@ ecall_iwasm_main(uint8_t *wasm_file_buf, uint32_t wasm_file_size)
 
     os_set_print_function(enclave_print);
 
-    memset(&init_args, 0, sizeof(RuntimeInitArgs));
+    // Use Layer 2 protection for memset of RuntimeInitArgs
+    {
+        uint64_t saved_r15;
+        SAVE_R15(saved_r15);
+        SET_R15_BOUNDARY(R15_BOUNDARY_1);
+        memset(&init_args, 0, sizeof(RuntimeInitArgs));
+        RESTORE_R15(saved_r15);
+    }
 
     init_args.mem_alloc_type = Alloc_With_Pool;
     init_args.mem_alloc_option.pool.heap_buf = global_heap_buf;
@@ -794,6 +925,8 @@ fail2:
 fail1:
     /* destroy runtime environment */
     wasm_runtime_destroy();
+    
+    __unsan_layer_exit();
 }
  
 void nskernel_take_snapshot(void);
@@ -803,16 +936,23 @@ extern char __bss_start;
 extern char __bss_end;
 
 void ecall_nskernel_snapshot(void) {
+    __unsan_layer2_enter();
+    
     //snprintf(outside_print_buffer, 100, "g_peak_heap_used %ld\n", g_peak_heap_used);
     //enclave_print(outside_print_buffer);
     //snprintf(outside_print_buffer, 100, "bss size = %ld\n", (uint64_t)&__bss_end - (uint64_t)&__bss_start);
     //enclave_print(outside_print_buffer);
     nskernel_take_snapshot();
+    
+    __unsan_layer_exit();
 }
 
 void nskernel_rollback(void);
 void ecall_nskernel_rollback(void) {
+    __unsan_layer2_enter();
+    
     //enclave_print("Bypassing for CPP\n");
     nskernel_rollback();
+    
+    __unsan_layer_exit();
 }
-
